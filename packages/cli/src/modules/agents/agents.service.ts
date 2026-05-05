@@ -1106,6 +1106,11 @@ export class AgentsService {
 				}),
 			),
 			finishReason: result.finishReason ?? 'stop',
+			session: {
+				agentId,
+				projectId,
+				sessionId: threadId,
+			},
 		};
 	}
 
