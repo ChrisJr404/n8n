@@ -38,7 +38,7 @@ import { saveMessagesToThread } from './memory-store';
 import { AgentMessageList, type SerializedMessageList } from './message-list';
 import { fromAiFinishReason, fromAiMessages } from './messages';
 import { createEmbeddingModel, createModel } from './model-factory';
-import { runObservationalCycle } from './observational-cycle';
+import { runObservationalCycle, type RunObservationalCycleOpts } from './observational-cycle';
 import { loadObservationalMemoryContext } from './observational-memory';
 import { generateRunId, RunStateManager } from './run-state';
 import {
@@ -243,6 +243,24 @@ export class AgentRuntime {
 	 */
 	async dispose(): Promise<void> {
 		await this.backgroundTasks.flush();
+	}
+
+	/**
+	 * Schedule an observational-memory cycle to run via the background-task
+	 * tracker. Returns immediately; callers do not await. Errors inside the
+	 * cycle are caught by `runObservationalCycle` and emitted via
+	 * `AgentEvent.Error` with `source: 'observer' | 'compactor'`.
+	 *
+	 * Used by `Agent.reflectInBackground(...)` so consumers (e.g. the cli's
+	 * post-stream trigger) can fire-and-forget without blocking the response.
+	 */
+	scheduleBackgroundCycle(opts: RunObservationalCycleOpts): void {
+		this.backgroundTasks.track(
+			runObservationalCycle(opts).then(
+				() => undefined,
+				() => undefined,
+			),
+		);
 	}
 
 	/** Return the latest state snapshot. */

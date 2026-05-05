@@ -562,6 +562,42 @@ export class Agent implements BuiltAgent, AgentBuilder {
 		observe?: ObserveFn;
 		compact?: CompactFn;
 	}): Promise<{ status: 'no-config' } | RunObservationalCycleResult> {
+		const cycle = await this.buildCycleOpts(opts);
+		if (cycle === null) return { status: 'no-config' };
+		return await runObservationalCycle(cycle);
+	}
+
+	/**
+	 * Schedule an observational-memory cycle on the background-task tracker
+	 * and return immediately. Used by consumers (e.g. the cli's post-stream
+	 * trigger) that want the observer + compactor to run without blocking
+	 * the response. Errors inside the cycle are surfaced via
+	 * `AgentEvent.Error` (source: 'observer' | 'compactor').
+	 *
+	 * No-ops when observational memory isn't configured or no observer is
+	 * available — same `'no-config'` short-circuit as `reflect()`.
+	 */
+	reflectInBackground(opts: { threadId: string; observe?: ObserveFn; compact?: CompactFn }): void {
+		void (async () => {
+			const cycle = await this.buildCycleOpts(opts);
+			if (cycle === null) return;
+			const runtime = await this.ensureBuilt();
+			runtime.scheduleBackgroundCycle(cycle);
+		})();
+	}
+
+	/**
+	 * Build the {@link RunObservationalCycleOpts} from the agent's
+	 * configured observational memory + the per-call overrides. Returns
+	 * `null` when observational memory isn't configured or no observer
+	 * function is available — the shared "no-config" short-circuit for
+	 * both `reflect()` and `reflectInBackground()`.
+	 */
+	private async buildCycleOpts(opts: {
+		threadId: string;
+		observe?: ObserveFn;
+		compact?: CompactFn;
+	}) {
 		const obsConfig = this.memoryConfig?.observationalMemory;
 		const memory = this.memoryConfig?.memory;
 		const observe = opts.observe ?? obsConfig?.observe;
@@ -571,13 +607,13 @@ export class Agent implements BuiltAgent, AgentBuilder {
 			typeof (memory as Partial<BuiltObservationStore>).appendObservations !== 'function' ||
 			!observe
 		) {
-			return { status: 'no-config' };
+			return null;
 		}
 		const runtime = await this.ensureBuilt();
 		const telemetry = runtime.getConfiguredTelemetry();
-		return await runObservationalCycle({
+		return {
 			memory: memory as BuiltMemory & BuiltObservationStore,
-			scopeKind: 'thread',
+			scopeKind: 'thread' as const,
 			scopeId: opts.threadId,
 			observe,
 			compact: opts.compact ?? obsConfig.compact,
@@ -588,7 +624,7 @@ export class Agent implements BuiltAgent, AgentBuilder {
 			...(obsConfig.lockTtlMs !== undefined && { lockTtlMs: obsConfig.lockTtlMs }),
 			...(telemetry !== undefined && { telemetry }),
 			eventBus: this.eventBus,
-		});
+		};
 	}
 
 	/** Generate a response (non-streaming). Lazy-builds on first call. */
