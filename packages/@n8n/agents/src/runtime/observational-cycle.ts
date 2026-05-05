@@ -91,6 +91,8 @@ async function runInsideLock(
 			deltaMessages,
 			currentSummary: previousSummary,
 			cursor,
+			scopeKind,
+			scopeId,
 			telemetry,
 		});
 	} catch (error) {
@@ -100,6 +102,7 @@ async function runInsideLock(
 
 	if (observerRows.length > 0) {
 		await memory.appendObservations(observerRows);
+		emitObservationsWritten(eventBus, scopeKind, scopeId, observerRows);
 	}
 
 	const lastMessage = deltaMessages[deltaMessages.length - 1];
@@ -122,7 +125,7 @@ async function maybeCompact(
 	summaryKind: string,
 	previousSummary: string | null,
 ): Promise<boolean> {
-	const { memory, scopeKind, scopeId, compact, telemetry } = opts;
+	const { memory, scopeKind, scopeId, compact, telemetry, eventBus } = opts;
 	if (!compact || opts.compactionRowThreshold === undefined) return false;
 
 	const uncompacted = await memory.getObservations({
@@ -145,6 +148,7 @@ async function maybeCompact(
 		inputs.map((r) => r.id),
 		new Date(),
 	);
+	emitCompactionRan(eventBus, scopeKind, scopeId, inputs.length, result.summary.payload);
 	return true;
 }
 
@@ -156,6 +160,40 @@ function emitError(
 	if (!eventBus) return;
 	const message = error instanceof Error ? error.message : String(error);
 	eventBus.emit({ type: AgentEvent.Error, message, error, source });
+}
+
+function emitObservationsWritten(
+	eventBus: AgentEventBus | undefined,
+	scopeKind: ScopeKind,
+	scopeId: string,
+	rows: NewObservation[],
+): void {
+	if (!eventBus) return;
+	const kinds = Array.from(new Set(rows.map((r) => r.kind)));
+	eventBus.emit({
+		type: AgentEvent.ObservationsWritten,
+		scopeKind,
+		scopeId,
+		count: rows.length,
+		kinds,
+	});
+}
+
+function emitCompactionRan(
+	eventBus: AgentEventBus | undefined,
+	scopeKind: ScopeKind,
+	scopeId: string,
+	observationsCompacted: number,
+	summaryPayload: unknown,
+): void {
+	if (!eventBus) return;
+	eventBus.emit({
+		type: AgentEvent.CompactionRan,
+		scopeKind,
+		scopeId,
+		observationsCompacted,
+		summary: renderPayload(summaryPayload),
+	});
 }
 
 function renderPayload(payload: unknown): string {

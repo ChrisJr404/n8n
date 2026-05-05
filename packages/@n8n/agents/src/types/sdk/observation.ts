@@ -54,13 +54,20 @@ export interface ObservationLockHandle {
 /**
  * Consumer-provided observer function. Called inside the orchestrator's
  * lock + cursor scope; receives the message delta since the last cursor
- * advance and the current rolling summary, returns zero or more rows to
- * append.
+ * advance, the scope being observed, and the current rolling summary, then
+ * returns zero or more rows to append.
+ *
+ * `scopeKind` and `scopeId` are forwarded from the orchestrator opts so the
+ * consumer can stamp them onto the returned `NewObservation` rows without
+ * having to reach into `cursor` (which is `null` on the very first cycle for
+ * a scope).
  */
 export type ObserveFn = (ctx: {
 	deltaMessages: AgentDbMessage[];
 	currentSummary: string | null;
 	cursor: ObservationCursor | null;
+	scopeKind: ScopeKind;
+	scopeId: string;
 	telemetry: BuiltTelemetry | undefined;
 }) => Promise<NewObservation[]>;
 

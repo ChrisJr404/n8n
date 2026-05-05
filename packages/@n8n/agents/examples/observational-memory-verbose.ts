@@ -111,8 +111,8 @@ const observe: ObserveFn = async (ctx) => {
 			const parsed = JSON.parse(trimmed) as { kind?: string; text?: string; durationMs?: number };
 			if (!parsed.kind || !parsed.text) continue;
 			rows.push({
-				scopeKind: 'thread',
-				scopeId: ctx.cursor?.scopeId ?? '',
+				scopeKind: ctx.scopeKind,
+				scopeId: ctx.scopeId,
 				kind: parsed.kind === 'gap' ? 'gap' : 'observation',
 				payload: parsed.text,
 				durationMs: typeof parsed.durationMs === 'number' ? parsed.durationMs : null,

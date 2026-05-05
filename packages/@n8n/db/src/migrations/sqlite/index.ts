@@ -164,6 +164,7 @@ import { AddExecutionDeduplicationKey1778000000000 } from '../common/17780000000
 import { CreateAgentTables1783000000000 } from '../common/1783000000000-CreateAgentTables';
 import { CreateExecutionThreads1783000000001 } from '../common/1783000000001-CreateExecutionThreads';
 import { CreateAgentObservationTables1784000000000 } from '../common/1784000000000-CreateAgentObservationTables';
+import { AddSeqToAgentMessages1784000000001 } from '../common/1784000000001-AddSeqToAgentMessages';
 import type { Migration } from '../migration-types';
 
 const sqliteMigrations: Migration[] = [
@@ -333,6 +334,7 @@ const sqliteMigrations: Migration[] = [
 	CreateAgentTables1783000000000,
 	CreateExecutionThreads1783000000001,
 	CreateAgentObservationTables1784000000000,
+	AddSeqToAgentMessages1784000000001,
 ];
 
 export { sqliteMigrations };

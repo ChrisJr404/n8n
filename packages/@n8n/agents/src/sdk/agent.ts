@@ -407,6 +407,15 @@ export class Agent implements BuiltAgent, AgentBuilder {
 	}
 
 	/**
+	 * Remove a previously registered event handler. Pair with `on()` so
+	 * per-request subscribers (e.g. the cli's ExecutionRecorder) can detach
+	 * cleanly between turns instead of accumulating on a long-lived agent.
+	 */
+	off(event: AgentEvent, handler: AgentEventHandler): void {
+		this.eventBus.off(event, handler);
+	}
+
+	/**
 	 * Wrap this agent as a tool for use in multi-agent composition.
 	 * The tool sends a text prompt to this agent and returns the text of the response.
 	 *

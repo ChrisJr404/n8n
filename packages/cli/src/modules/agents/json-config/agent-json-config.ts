@@ -14,6 +14,12 @@ const SemanticRecallSchema = z.object({
 	embedder: z.string().optional(),
 });
 
+const ObservationalMemoryConfigSchema = z.object({
+	enabled: z.boolean(),
+	compactionRowThreshold: z.number().int().min(1).max(100).optional(),
+	stalenessThresholdMs: z.number().int().min(0).optional(),
+});
+
 // TODO: Create a list of all supported memory storages, define connection params for each storage
 const MemoryConfigSchema = z.object({
 	enabled: z.boolean(),
@@ -21,6 +27,7 @@ const MemoryConfigSchema = z.object({
 	connection: z.record(z.unknown()).optional(),
 	lastMessages: z.number().int().min(1).max(200).optional(),
 	semanticRecall: SemanticRecallSchema.optional(),
+	observationalMemory: ObservationalMemoryConfigSchema.optional(),
 });
 
 const ThinkingConfigSchema = z.object({
