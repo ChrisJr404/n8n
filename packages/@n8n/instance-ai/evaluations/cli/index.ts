@@ -711,39 +711,52 @@ async function runDirectLoop(config: RunConfig): Promise<MultiRunEvaluation> {
 	const indexed = testCasesWithFiles.map((tc, origIdx) => ({ tc, origIdx }));
 	const buckets = partitionRoundRobin(indexed, lanes.length);
 
-	const allRunResults: WorkflowTestCaseResult[][] = [];
-	for (let iter = 0; iter < args.iterations; iter++) {
-		if (args.iterations > 1) {
-			logger.info(`--- Iteration #${String(iter + 1)}/${String(args.iterations)} ---`);
-		}
-		const laneResults = await Promise.all(
-			lanes.map(async (lane, laneIdx) => {
-				const bucket = buckets[laneIdx];
-				const laneTag =
-					lanes.length > 1 ? ` [lane ${String(laneIdx + 1)}/${String(lanes.length)}]` : '';
-				const results = await runWithConcurrency(
-					bucket,
-					async ({ tc }) =>
-						await runWorkflowTestCase({
-							client: lane.client,
-							testCase: tc.testCase,
-							timeoutMs: args.timeoutMs,
-							seededCredentialTypes: lane.seedResult.seededTypes,
-							preRunWorkflowIds: lane.preRunWorkflowIds,
-							claimedWorkflowIds: lane.claimedWorkflowIds,
-							logger,
-							keepWorkflows: args.keepWorkflows,
-							laneTag,
-						}),
-					MAX_CONCURRENT_BUILDS,
-				);
-				return bucket.map((b, i) => ({ origIdx: b.origIdx, result: results[i] }));
-			}),
-		);
-		const flat = laneResults.flat();
-		flat.sort((a, b) => a.origIdx - b.origIdx);
-		allRunResults.push(flat.map((x) => x.result));
-	}
+	// Iterations run in parallel: each `--iterations` previously executed
+	// sequentially, so 3 builds at ~150s each forced ~450s of wall-clock no
+	// matter how fast the rest of the pipeline ran. Builds are independent
+	// across iterations (separate threadIds, separate workflow IDs); the only
+	// shared mutable lane state is `claimedWorkflowIds`, a Set whose add/has
+	// are single-threaded-safe between awaits in JS. `preRunWorkflowIds` is a
+	// snapshot from lane init and never mutated.
+	//
+	// Concurrent build/HTTP load on the n8n server matches existing
+	// MAX_CONCURRENT_BUILDS=4 per-lane behavior; this just lets the cap be
+	// utilized across iterations rather than only within one iteration's
+	// per-test-case loop.
+	const allRunResults: WorkflowTestCaseResult[][] = await Promise.all(
+		Array.from({ length: args.iterations }, async (_unused, iter) => {
+			if (args.iterations > 1) {
+				logger.info(`--- Iteration #${String(iter + 1)}/${String(args.iterations)} starting ---`);
+			}
+			const laneResults = await Promise.all(
+				lanes.map(async (lane, laneIdx) => {
+					const bucket = buckets[laneIdx];
+					const laneTag =
+						lanes.length > 1 ? ` [lane ${String(laneIdx + 1)}/${String(lanes.length)}]` : '';
+					const results = await runWithConcurrency(
+						bucket,
+						async ({ tc }) =>
+							await runWorkflowTestCase({
+								client: lane.client,
+								testCase: tc.testCase,
+								timeoutMs: args.timeoutMs,
+								seededCredentialTypes: lane.seedResult.seededTypes,
+								preRunWorkflowIds: lane.preRunWorkflowIds,
+								claimedWorkflowIds: lane.claimedWorkflowIds,
+								logger,
+								keepWorkflows: args.keepWorkflows,
+								laneTag,
+							}),
+						MAX_CONCURRENT_BUILDS,
+					);
+					return bucket.map((b, i) => ({ origIdx: b.origIdx, result: results[i] }));
+				}),
+			);
+			const flat = laneResults.flat();
+			flat.sort((a, b) => a.origIdx - b.origIdx);
+			return flat.map((x) => x.result);
+		}),
+	);
 
 	return aggregateResults(allRunResults, args.iterations);
 }
